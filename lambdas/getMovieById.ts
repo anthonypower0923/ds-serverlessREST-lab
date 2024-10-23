@@ -1,7 +1,5 @@
-import { Handler } from "aws-lambda";
-
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand , QueryCommand, QueryCommandInput } from "@aws-sdk/lib-dynamodb";
 import { APIGatewayProxyHandlerV2 } from "aws-lambda";
 
 const ddbClient = new DynamoDBClient({ region: process.env.REGION });
@@ -11,6 +9,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     console.log("[EVENT]", JSON.stringify(event));
     const parameters  = event?.pathParameters;
     const movieId = parameters?.movieId ? parseInt(parameters.movieId) : undefined;
+    const queryParams = event.queryStringParameters;
 
     if (!movieId) {
       return {
@@ -40,9 +39,11 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
     }
     const body = {
       data: commandOutput.Item,
+      cast: ''
     };
 
     // Return Response
+    if (!queryParams) {
     return {
       statusCode: 200,
       headers: {
@@ -50,6 +51,43 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
       },
       body: JSON.stringify(body),
     };
+  } else if (queryParams.cast == 'True') {
+    let commandInput: QueryCommandInput = {
+      TableName: process.env.CAST_TABLE_NAME,
+    };
+
+    commandInput = {
+      ...commandInput,
+      KeyConditionExpression: "movieId = :m",
+      ExpressionAttributeValues: {
+        ":m": movieId,
+      },
+    };
+
+    const queryCommandOutput = await ddbClient.send(
+      new QueryCommand(commandInput)
+      );
+
+      const body_cast = {
+        data: commandOutput.Item,
+        cast: queryCommandOutput.Items
+      }
+      return {
+        statusCode: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body_cast),
+      };
+    } else {
+      return {
+        statusCode: 200,
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+      };
+    }
   } catch (error: any) {
     console.log(JSON.stringify(error));
     return {
